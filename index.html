@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Timeline</title>
+  <style>
+    :root{
+      --line:#d9d9d9;
+      --text:#111;
+      --muted:#666;
+      --card:#fff;
+      --bg:#fafafa;
+      --shadow: 0 6px 20px rgba(0,0,0,.08);
+      --radius: 16px;
+    }
+    body{ margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; background:var(--bg); color:var(--text); }
+    header{
+      position: sticky; top: 0; z-index: 10;
+      background: rgba(250,250,250,.9); backdrop-filter: blur(10px);
+      border-bottom: 1px solid #eee;
+      padding: 14px 16px;
+    }
+    .bar{ max-width: 980px; margin: 0 auto; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+    .bar h1{ font-size: 16px; margin:0; margin-right:auto; letter-spacing:.2px; }
+    .bar input, .bar select, .bar button{
+      font: inherit; padding: 10px 12px; border:1px solid #ddd; border-radius: 12px; background:#fff;
+    }
+    .bar button{ cursor:pointer; }
+    .wrap{ max-width: 980px; margin: 0 auto; padding: 22px 16px 60px; }
+
+    .timeline{ position: relative; padding-left: 34px; margin-top: 18px; }
+    .timeline::before{
+      content:""; position:absolute; left: 14px; top: 0; bottom: 0;
+      width: 2px; background: var(--line); border-radius: 2px;
+    }
+
+    .year{
+      position: sticky; top: 62px;
+      display:inline-block; margin: 18px 0 10px; padding: 6px 10px;
+      border:1px solid #eee; background:#fff; border-radius: 999px;
+      color: var(--muted); font-size: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,.04);
+    }
+
+    .item{ position: relative; margin: 14px 0; display: grid; gap: 10px; }
+    .dot{
+      position:absolute; left: 6px; top: 18px;
+      width: 16px; height: 16px; border-radius: 50%;
+      background:#fff; border: 2px solid #111;
+      box-shadow: 0 2px 10px rgba(0,0,0,.08);
+    }
+    .card{
+      background: var(--card); border-radius: var(--radius);
+      box-shadow: var(--shadow); padding: 14px 14px 12px; border: 1px solid #eee;
+    }
+    .meta{
+      display:flex; gap:10px; align-items:baseline; flex-wrap:wrap;
+      color: var(--muted); font-size: 12px; margin-bottom: 6px;
+    }
+    .title{ margin: 0 0 8px; font-size: 16px; line-height: 1.25; letter-spacing: .1px; }
+    .desc{
+      margin: 0; color: #222; line-height: 1.45;
+      display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .chip{
+      padding: 4px 8px; border-radius: 999px; border:1px solid #eee;
+      background:#f6f6f6; color:#333;
+    }
+    .actions{ margin-top: 10px; display:flex; gap:10px; flex-wrap:wrap; }
+    a.btn, button.btn{
+      display:inline-flex; align-items:center; gap:8px;
+      padding: 10px 12px; border-radius: 12px;
+      border:1px solid #ddd; background:#fff; color:#111; text-decoration:none;
+      cursor:pointer;
+    }
+    .thumb{
+      width: 100%; max-height: 220px; object-fit: cover;
+      border-radius: 12px; border: 1px solid #eee; margin-top: 10px;
+    }
+
+    dialog{ border: none; border-radius: 18px; box-shadow: 0 30px 80px rgba(0,0,0,.25);
+      width: min(760px, calc(100% - 24px)); padding: 0; }
+    dialog::backdrop{ background: rgba(0,0,0,.35); }
+    .modal{ padding: 16px 16px 14px; background:#fff; }
+    .modal .top{ display:flex; gap:10px; align-items:flex-start; }
+    .modal h2{ margin: 0 0 6px; font-size: 18px; }
+    .modal .close{ margin-left:auto; }
+    .modal .full{ margin: 10px 0 0; color:#222; line-height:1.55; white-space: pre-wrap; }
+    .status{ color: var(--muted); font-size: 13px; margin-top: 12px; }
+
+    @media (min-width: 780px){
+      .item{ margin-left: 10px; }
+      .card{ padding: 16px 16px 14px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="bar">
+      <h1>Timeline</h1>
+      <input id="q" type="search" placeholder="Zoek…" />
+      <select id="cat">
+        <option value="">Alle categorieën</option>
+      </select>
+      <button id="sort" title="Sorteer">Nieuwste eerst</button>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div id="status" class="status">Laden…</div>
+    <div id="timeline" class="timeline" aria-live="polite"></div>
+  </main>
+
+  <dialog id="dlg">
+    <div class="modal">
+      <div class="top">
+        <div>
+          <div id="dlgMeta" class="meta"></div>
+          <h2 id="dlgTitle"></h2>
+        </div>
+        <button class="btn close" id="dlgClose">Sluiten</button>
+      </div>
+      <img id="dlgImg" class="thumb" alt="" style="display:none;">
+      <div class="actions" id="dlgActions"></div>
+      <p id="dlgText" class="full"></p>
+    </div>
+  </dialog>
+
+<script>
+  const elTimeline = document.getElementById('timeline');
+  const elStatus = document.getElementById('status');
+  const elQ = document.getElementById('q');
+  const elCat = document.getElementById('cat');
+  const elSort = document.getElementById('sort');
+
+  const dlg = document.getElementById('dlg');
+  const dlgTitle = document.getElementById('dlgTitle');
+  const dlgMeta = document.getElementById('dlgMeta');
+  const dlgText = document.getElementById('dlgText');
+  const dlgImg = document.getElementById('dlgImg');
+  const dlgActions = document.getElementById('dlgActions');
+  document.getElementById('dlgClose').addEventListener('click', () => dlg.close());
+
+  let raw = [];
+  let newestFirst = true;
+
+  const fmt = new Intl.DateTimeFormat('nl-NL', { year:'numeric', month:'short', day:'2-digit' });
+
+  function safeYear(dateStr){
+    const d = new Date(dateStr);
+    return Number.isFinite(d.getTime()) ? d.getFullYear() : '—';
+  }
+
+  function dateLabel(item){
+    const d1 = item.date ? fmt.format(new Date(item.date)) : '';
+    const d2 = item.endDate ? fmt.format(new Date(item.endDate)) : '';
+    return d2 ? `${d1} – ${d2}` : d1;
+  }
+
+  function buildCategoryOptions(items){
+    const cats = Array.from(new Set(items.map(x => x.category || 'Uncategorized')))
+      .sort((a,b)=>a.localeCompare(b));
+    for (const c of cats){
+      const opt = document.createElement('option');
+      opt.value = c;
+      opt.textContent = c;
+      elCat.appendChild(opt);
+    }
+  }
+
+  function render(items){
+    elTimeline.innerHTML = '';
+
+    const q = (elQ.value || '').trim().toLowerCase();
+    const cat = elCat.value || '';
+
+    let list = items
+      .filter(x => !cat || x.category === cat)
+      .filter(x => !q || (x.title + ' ' + x.description + ' ' + x.category).toLowerCase().includes(q));
+
+    list.sort((a,b) => newestFirst
+      ? new Date(b.date) - new Date(a.date)
+      : new Date(a.date) - new Date(b.date)
+    );
+
+    if (!list.length){
+      elStatus.textContent = 'Geen resultaten.';
+      return;
+    }
+    elStatus.textContent = `${list.length} item(s).`;
+
+    let currentYear = null;
+    for (const item of list){
+      const y = safeYear(item.date);
+      if (y !== currentYear){
+        currentYear = y;
+        const yearEl = document.createElement('div');
+        yearEl.className = 'year';
+        yearEl.textContent = currentYear;
+        elTimeline.appendChild(yearEl);
+      }
+
+      const wrap = document.createElement('div');
+      wrap.className = 'item';
+
+      const dot = document.createElement('div');
+      dot.className = 'dot';
+
+      const card = document.createElement('div');
+      card.className = 'card';
+
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+
+      const date = document.createElement('span');
+      date.textContent = dateLabel(item);
+
+      const chip = document.createElement('span');
+      chip.className = 'chip';
+      chip.textContent = item.category || 'Uncategorized';
+
+      meta.appendChild(date);
+      meta.appendChild(chip);
+
+      const title = document.createElement('h3');
+      title.className = 'title';
+      title.textContent = item.title || '(zonder titel)';
+
+      const desc = document.createElement('p');
+      desc.className = 'desc';
+      desc.textContent = item.description || '';
+
+      const actions = document.createElement('div');
+      actions.className = 'actions';
+
+      const moreBtn = document.createElement('button');
+      moreBtn.className = 'btn';
+      moreBtn.textContent = 'Open';
+      moreBtn.addEventListener('click', () => openModal(item));
+      actions.appendChild(moreBtn);
+
+      if (item.link){
+        const a = document.createElement('a');
+        a.className = 'btn';
+        a.href = item.link;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        a.textContent = 'Link';
+        actions.appendChild(a);
+      }
+
+      card.appendChild(meta);
+      card.appendChild(title);
+      card.appendChild(desc);
+
+      if (item.image){
+        const img = document.createElement('img');
+        img.className = 'thumb';
+        img.loading = 'lazy';
+        img.alt = '';
+        img.src = item.image;
+        card.appendChild(img);
+      }
+
+      card.appendChild(actions);
+
+      wrap.appendChild(dot);
+      wrap.appendChild(card);
+      elTimeline.appendChild(wrap);
+    }
+  }
+
+  function openModal(item){
+    dlgTitle.textContent = item.title || '(zonder titel)';
+    dlgMeta.innerHTML = '';
+
+    const d = document.createElement('span');
+    d.textContent = dateLabel(item);
+    const c = document.createElement('span');
+    c.className = 'chip';
+    c.textContent = item.category || 'Uncategorized';
+    dlgMeta.appendChild(d);
+    dlgMeta.appendChild(c);
+
+    dlgText.textContent = item.description || '';
+
+    dlgActions.innerHTML = '';
+    if (item.link){
+      const a = document.createElement('a');
+      a.className = 'btn';
+      a.href = item.link;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.textContent = 'Open link';
+      dlgActions.appendChild(a);
+    }
+
+    if (item.image){
+      dlgImg.src = item.image;
+      dlgImg.style.display = '';
+    } else {
+      dlgImg.style.display = 'none';
+    }
+
+    dlg.showModal();
+  }
+
+  async function load(){
+    elStatus.textContent = 'Laden…';
+    try{
+      // GitHub Pages-safe URL + cache-buster
+      const url = new URL('data/timeline.json', window.location.href);
+      url.searchParams.set('v', Date.now());
+
+      const res = await fetch(url, { cache: 'no-store' });
+      if (!res.ok) throw new Error(`timeline.json fetch failed (${res.status})`);
+
+      const json = await res.json();
+      raw = json.items || [];
+
+      // reset categories each reload
+      elCat.innerHTML = '<option value="">Alle categorieën</option>';
+      buildCategoryOptions(raw);
+
+      render(raw);
+    } catch(e){
+      elStatus.textContent = 'Fout bij laden: ' + (e?.message || e);
+      console.error(e);
+    }
+  }
+
+  elQ.addEventListener('input', () => render(raw));
+  elCat.addEventListener('change', () => render(raw));
+  elSort.addEventListener('click', () => {
+    newestFirst = !newestFirst;
+    elSort.textContent = newestFirst ? 'Nieuwste eerst' : 'Oudste eerst';
+    render(raw);
+  });
+
+  load();
+</script>
+</body>
+</html>
