@@ -136,7 +136,8 @@ function escapeHtml(str) {
 function escapeAttr(str){ return escapeHtml(str); }
 
 async function main() {
-  const res = await fetch("data/events.json", { cache: "no-store" });
+  const DATA_URL = new URL("data/events.json", document.baseURI);
+  const res = await fetch(DATA_URL, { cache: "no-store" });
   if (!res.ok) throw new Error("Kan data/events.json niet laden");
   const payload = await res.json();
 
