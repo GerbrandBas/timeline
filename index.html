@@ -1,6 +1,60 @@
 <!doctype html>
 <html lang="nl">
+<head><!doctype html>
+<html lang="nl">
 <head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Tijdlijn</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <h1>Interactieve tijdlijn</h1>
+      <p id="meta" class="meta">Laden…</p>
+    </div>
+
+    <div class="controls">
+      <input id="search" type="search" placeholder="Zoek titel/tekst…" />
+      <select id="category">
+        <option value="">Alle categorieën</option>
+      </select>
+      <label class="checkbox">
+        <input id="featured" type="checkbox" />
+        <span>Featured</span>
+      </label>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="sticky">
+      <div class="now">
+        <div class="pill">Actieve datum</div>
+        <div id="activeDate" class="active-date">—</div>
+      </div>
+      <div class="help">
+        <p><b>Tip</b>: scroll — de marker volgt mee. Klik op een item voor details.</p>
+      </div>
+    </aside>
+
+    <section>
+      <div id="timeline" class="timeline" aria-live="polite"></div>
+      <div id="empty" class="empty hidden">Geen resultaten.</div>
+    </section>
+  </main>
+
+  <dialog id="modal" class="modal">
+    <form method="dialog" class="modal-card">
+      <button class="close" aria-label="Sluiten">✕</button>
+      <div id="modalBody"></div>
+    </form>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
+
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Timeline</title>
