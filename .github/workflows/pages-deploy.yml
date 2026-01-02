@@ -1,0 +1,102 @@
+name: Daily sync Airtable timeline -> GitHub Pages
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "15 2 * * *"   # 02:15 UTC dagelijks (≈ 03:15 Amsterdam winter / 04:15 zomer)
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/configure-pages@v5
+
+      - name: Fetch Airtable -> data/timeline.json
+        env:
+          AIRTABLE_TOKEN: ${{ secrets.AIRTABLE_TOKEN }}
+          AIRTABLE_BASE_ID: ${{ secrets.AIRTABLE_BASE_ID }}
+          AIRTABLE_TABLE: ${{ secrets.AIRTABLE_TABLE }}
+          AIRTABLE_VIEW: ${{ secrets.AIRTABLE_VIEW }}
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+
+          const token = process.env.AIRTABLE_TOKEN;
+          const baseId = process.env.AIRTABLE_BASE_ID;
+          const table = process.env.AIRTABLE_TABLE || "Timeline";
+          const view  = process.env.AIRTABLE_VIEW  || "Grid view";
+
+          if (!token || !baseId) process.exit(1);
+
+          async function fetchAll() {
+            let offset = null;
+            const items = [];
+            do {
+              const url = new URL(`https://api.airtable.com/v0/${baseId}/${encodeURIComponent(table)}`);
+              url.searchParams.set("pageSize", "100");
+              url.searchParams.set("view", view);
+              url.searchParams.set("sort[0][field]", "Date");
+              url.searchParams.set("sort[0][direction]", "asc");
+              if (offset) url.searchParams.set("offset", offset);
+
+              const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` }});
+              if (!res.ok) throw new Error(await res.text());
+              const json = await res.json();
+
+              for (const r of (json.records || [])) {
+                const f = r.fields || {};
+                if (!f.Date) continue;
+
+                const img = Array.isArray(f.Image) && f.Image[0]?.thumbnails?.large?.url
+                  ? f.Image[0].thumbnails.large.url
+                  : (Array.isArray(f.Image) && f.Image[0]?.url ? f.Image[0].url : null);
+
+                items.push({
+                  id: r.id,
+                  title: f.Title || "",
+                  date: f.Date || null,
+                  endDate: f.EndDate || null,
+                  description: f.Description || "",
+                  category: f.Category || "Uncategorized",
+                  link: f.Link || null,
+                  image: img
+                });
+              }
+              offset = json.offset || null;
+            } while (offset);
+
+            return items;
+          }
+
+          (async () => {
+            const items = await fetchAll();
+            const outDir = path.join(process.cwd(), "data");
+            fs.mkdirSync(outDir, { recursive: true });
+            fs.writeFileSync(path.join(outDir, "timeline.json"), JSON.stringify({ items }, null, 2));
+            console.log(`Wrote ${items.length} items`);
+          })().catch(err => { console.error(err); process.exit(1); });
+          NODE
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+    steps:
+      - uses: actions/deploy-pages@v4
